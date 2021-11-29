@@ -10,7 +10,7 @@
   the text for a time period, then lcd backlights will turn off. This will help in
   saving power when lcd is not used for long time.
 
-- To change the display time period, change the time delay argument of xTimerCreate.
+- To change the display time period, change the time delay argument of xTimerCreate function.
   This is the second argument. Here, change the delay time in milliseconds. It is 
   initialized to 5000 (5 seconds). 
 
