@@ -4,4 +4,5 @@
 
 - We run the HTTP server in first core (PRO_CPU(0)) and the traffic light tasks in the second core (APP_CPU(1)), so both are independent of each other but the information is shared.
 
-- HTTP server part is still under development.
+- HTTP server is simple as of now, it contains the state if the machine and the traffic status in the highway as measured by the ultrasonic sensor.
+

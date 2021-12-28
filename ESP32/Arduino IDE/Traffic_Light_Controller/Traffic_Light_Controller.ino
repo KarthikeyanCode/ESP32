@@ -47,6 +47,7 @@ char state[100];
 uint8_t yellow_flag=0;
 uint8_t farmgreen_flag=0;
 uint8_t highwaygreen_flag=0;
+uint8_t flag;
 char* ssid = "Enter your ssid here";
 char* password = "Enter your password here";
 String client_message;
@@ -57,7 +58,7 @@ char prev_c;
 //HTTP header - HTTP server
 const char* header = "HTTP/1.1 200 OK\n"
                      "Content-type:text/html\n"
-                     "Connection: Keep Alive\n";
+                     "Connection: close\n";
 
 //HTML Code (HTTP response) - HTTP server
 const char* code1 = "<!DOCTYPE html>\n"
@@ -253,61 +254,70 @@ void Web_Logger(void* parameters)
     WiFiClient client = server.available();
     if(client)//new client
     {
-      while(client.connected())//while the client is still connected 
+      Serial.println("New Client");
+      if(client.connected())//while the client is still connected 
       {
-        Serial.println("Client Connected");
-        client_message = "";
+        //Serial.println("Client Connected");
+        //client_message = "";
         while(client.available())//information available to be read from client 
         {
-          while(1)
-          {
             c = client.read();
             client_message += c;
-            if(c == '\n' && prev_c == '\n')
+            if(c=='\n' && prev_c=='\n')
             {
+              //flag=1; 
               break;
             }
             prev_c = c;
-          }
-        
-          //Sending the HTTP header
-          client.print(header);
-          client.println();
-  
-          //sending the required HTTP Code - HTTP response
-          if(client_message.indexOf("GET /INFO") >= 0)
+        }
+        //if(flag==1)
+        //{
+        //Sending the HTTP header
+        client.print(header);
+        client.println();
+
+        //sending the required HTTP Code - HTTP response
+        if(client_message.indexOf("GET /INFO") >= 0)
+        {
+          client.print(code1);
+          client.print(code2);
+          if(highway_status == true)
           {
-            client.print(code1);
-            client.print(code2);
-            if(highway_status == true)
-            {
-              client.print(traffic_high);
-            }
-            else
-            {
-              client.print(traffic_low);
-            }
-            client.print(code3);
-            client.print(code4);
-            client.println();
+            client.print(traffic_high);
           }
           else
           {
-            client.print(code1);
-            client.print(code2);
-            if(highway_status == true)
-            {
-              client.print(traffic_high);
-            }
-            else
-            {
-              client.print(traffic_low);
-            }
-            client.print(code3);
-            client.print(code4);
-            client.println();
+            client.print(traffic_low);
           }
+          client.print(code3);
+          client.print(state);
+          client.print(code4);
+          client.println();
         }
+        else
+        {
+          client.print(code1);
+          client.print(code2);
+          if(highway_status == true)
+          {
+            client.print(traffic_high);
+          }
+          else
+          {
+            client.print(traffic_low);
+          }
+          client.print(code3);
+          client.print(state);
+          client.print(code4);
+          client.println();
+        }
+          //flag=0;
+        //}
+        client.stop();
+      }
+      else
+      {
+        Serial.println("Waiting for client to connect");
       }
     }
     //yeilding the first core
@@ -377,8 +387,9 @@ void setup()
 
   //Variable Initialization 
   highway_status = false;
-  prev_c = 's'; //random starting character
-
+  prev_c = 's';
+  flag=0;
+  
   //********************************************************
 
   //Setting up the HTTP server -----------------------------
