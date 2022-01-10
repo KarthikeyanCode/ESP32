@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" type="text/css" href="index.css">
+        <script src="index.js" type="text/javascript"></script>
+    </head>
+    <body>
+        <div class="SampleDiv" id="operation_div">
+            <h1>ESP32 smart alarm clock</h1>
+            <label for="alarm_time" id="alarm_time_input_label">Enter the alarm time (HH:MM - 24hr format):</label>
+            &ensp;
+            <input type="text" id="alarm_time_input" name="alarm_time">
+            <br>
+            <br>
+            <label for="alarm_snooze_time" id="alarm_snooze_time_input_label">Enter the alarm snooze time(in mins):</label>
+            &emsp;&emsp;&emsp;&ensp;&nbsp;
+            <input type="text" id="alarm_snooze_time_input" name="alarm_snooze_time">
+            <br>
+            <br>
+            <br>
+            <button class="button" onclick="xmlhttp_request()">set</button>
+        </div>
+        <div class="SampleDiv" id="notification_div">
+            <!--Alarm set node display and removal-->
+        </div>
+    </body>
+</html>
