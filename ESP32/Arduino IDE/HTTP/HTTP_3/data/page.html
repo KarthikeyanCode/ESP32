@@ -1,0 +1,111 @@
+<!--Simple HTML webpage-->
+<!DOCTYPE html>
+<html>
+    <head>
+        <style>
+            .button
+            {
+                border: none;
+                color: #ffffff;
+                padding: 15px 32px;
+                text-align: center;
+                display: inline-block;
+                font-size: 16px;
+                margin: 4px 2px;
+                cursor: pointer;
+                background-color: #000000;
+            }
+            .myDiv
+            {
+                text-align: center;
+            };
+        </style>
+        <script>
+            /*
+                Note:
+                For both these API calls the request received by server
+                can be veiwed in serial monitor. 
+            */
+            function getrequest()
+            {
+                var delayMilliseconds=3000;
+                const req = new XMLHttpRequest();
+                req.open("GET", "/get");
+                req.setRequestHeader("Content-Type", "application/json");
+                req.send(null);
+
+                const new_para_1 = document.createElement("p");
+                const new_para_1_text1 = document.createTextNode(
+                    "Response for the get request has arrived"
+                );
+                new_para_1.appendChild(new_para_1_text1);
+                const parent_div = document.getElementById("div02");
+                //once get request is successfull
+                req.onload = function()
+                {
+                    parent_div.appendChild(new_para_1);
+                }
+                setTimeout(function() {
+                    parent_div.removeChild(new_para_1);
+                }, delayMilliseconds);
+            }
+
+            function fetchrequest()
+            {
+                var delayMilliseconds=3000;
+                //var data, error, response;
+                fetch("/fetch")
+                .then(response =>{return response.json()});
+                //.then(data => data)
+                //.catch(error => error);
+                const new_para_1 = document.createElement("p");
+                const new_para_1_text1 = document.createTextNode("response for fetch has arrived");
+                new_para_1.appendChild(new_para_1_text1);
+                const parent_div = document.getElementById("div02");
+                parent_div.appendChild(new_para_1);
+                setTimeout(function() {
+                    parent_div.removeChild(new_para_1);
+                }, delayMilliseconds);
+            }
+        </script>
+    </head>
+    <body>
+        <div class="myDiv" id="div01">
+            <h1 id="Sample">Sample webpage</h1>
+        </div>
+        <prev>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+        </prev>
+        <div class="myDiv" id="div02">
+            <button class="button" onclick="getrequest()">Get</button>
+            <prev>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+            </prev>
+            <button class="button" onclick="fetchrequest()">Fetch</button>
+            <prev>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+                <br>
+            </prev>
+        </div>
+    </body>
+</html>
