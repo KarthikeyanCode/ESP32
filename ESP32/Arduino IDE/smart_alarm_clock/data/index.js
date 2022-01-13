@@ -17,9 +17,11 @@ function xmlhttp_request()
 {
     const xhr = new XMLHttpRequest();
     var alarm_time = document.getElementById("alarm_time_input").value;
+    var alarm_snooze_time = document.getElementById("alarm_snooze_time_input").value;
     const json_obj = {
         "type" : "alarm",
-        "time" : String(alarm_time)
+        "time" : String(alarm_time),
+        "snooze_time" : parseInt(String(alarm_snooze_time))
     };
 
     //"=>" function returns value by default 
@@ -31,7 +33,7 @@ function xmlhttp_request()
         }
     };
 
-    xhr.open("POST", "http://#IP/index");
+    xhr.open("POST", "http://192.168.1.125/index");
     xhr.setRequestHeader("conent-type", "application/json");
     xhr.send(JSON.stringify(json_obj));
     

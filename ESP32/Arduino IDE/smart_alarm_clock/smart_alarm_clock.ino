@@ -17,6 +17,7 @@
 #define buzzer 15
 #define dismiss_button 2
 #define snooze_button 4
+#define touch_sensor 5
 
 //class instantiaion
 WiFiUDP ntp_udp;
@@ -27,31 +28,75 @@ AsyncWebServer server(80);//pnning the async web server to port 80
 //timer specifics
 static const uint16_t timer_divider = 80;//timer frequency for all timers
 //static const uint64_t sync_timer_max_count = 10000000;//sync timer max count
-static const uint64_t snooze_timer_def_max_count = 60000000;//alarm timer max count for snooze
+static const uint64_t snooze_timer_def_max_count = 30000000;//alarm timer max count for snooze 
 static uint64_t alarm_timer_exact_count;//the actual timer alarm count 
 
 //task Hanlders
 static TaskHandle_t clock_task_handler;//main clock task 
 static TaskHandle_t alarm_task_handler;//alarm task
-static TaskHandle_t web_server_task_handler;
+static TaskHandle_t web_server_task_handler;//web server task
+static TaskHandle_t interrupt_set_task_handler;//interrupt set task 
 
 //timer handlers
-static hw_timer_t *sync_timer_handler = NULL;
-static hw_timer_t *snooze_timer_handler = NULL;
+static hw_timer_t* sync_timer_handler = NULL;
+static hw_timer_t* snooze_timer_handler = NULL;
+
+//mutex, semaphores and spinlocks
+/*
+static portMUX_TYPE dismiss_flag_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE snooze_flag_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE snooze_trigger_flag_spinlock = portMUX_INITIALIZER_UNLOCKED;
+*/
 
 //global flags
-uint8_t sync_flag = false;//for sync of ntp client to obtain present time 
-uint8_t alarm_set_flag = false;//used to see if alarm is set or not 
-uint8_t alarm_dismiss_flag = false;//used to dismiss alarm
-uint8_t alarm_snooze_flag = false;//used to snooze alarm
-uint8_t snooze_loop = false;//flag used for logical boundary conditions
+bool sync_flag = false;//for sync of ntp client to obtain present time 
+bool alarm_set_flag = false;//used to see if alarm is set or not 
+volatile bool alarm_dismiss_flag = false;//used to dismiss alarm
+volatile bool alarm_snooze_flag = false;//used to snooze alarm
+volatile bool snooze_trigger_flag = false;//used to indicate that snooze is trigerred
 
 //global variables
-const char* ssid = "wifi ssid";
-const char* pass = "wifi pass";
+//WiFi parameters
+const char* ssid = "WiFi ssid";
+const char* pass = "WiFi pass";
+//alarm parameters
 const char* alarm_time = NULL;
+unsigned int alarm_snooze_time;
 char present_time[6];//stores hours and minutes of present time
 String _date, _time, _date_formatted;
+
+//Interrupt Service Routine Functions
+//alarm snooze trigger timer ISR
+void IRAM_ATTR snooze_timer_isr()
+{
+  snooze_trigger_flag = true;
+  alarm_snooze_flag = false;
+  Serial.println("snooze_timer_isr() triggered");
+}
+
+//alarm dismiss button ISR
+void IRAM_ATTR alarm_dismiss_isr()
+{
+
+  alarm_dismiss_flag = true;
+  //portYIELD_FROM_ISR();
+  
+}
+
+//alarm snooze button ISR
+void IRAM_ATTR alarm_snooze_isr()
+{
+  alarm_snooze_flag = true;
+}
+
+void interrupt_set_task_function(void* parameters)
+{
+  //initialising GPIO interrupts
+  attachInterrupt(dismiss_button, alarm_dismiss_isr, FALLING);
+  attachInterrupt(touch_sensor, alarm_snooze_isr, FALLING);
+  
+  vTaskDelete(NULL);//delete the task after pinning the interrupts
+}
 
 void clock_task_function(void* parameters)
 {
@@ -70,6 +115,8 @@ void clock_task_function(void* parameters)
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print(_time);
+    Serial.print("Touch sensor input: ");
+    Serial.println(digitalRead(touch_sensor));
     vTaskDelay(1000/portTICK_PERIOD_MS);
   }
 }
@@ -90,19 +137,21 @@ void alarm_task_function(void* parameters)
             vTaskDelay(300/portTICK_PERIOD_MS);
             digitalWrite(buzzer, LOW);
             vTaskDelay(300/portTICK_PERIOD_MS);
+            Serial.println("This is alarm_set buzzer");
           }
+
           if(alarm_dismiss_flag == true)
-          {
+          { 
             alarm_set_flag = false;
             alarm_dismiss_flag = false;
             Serial.println("Alarm dismissed");
             break;
           }
+                    
           if(alarm_snooze_flag == true)
           {
             timerAlarmEnable(snooze_timer_handler);
             alarm_set_flag = false;
-            snooze_loop = true;
             Serial.println("Alarm snoozed");
             break;
           }
@@ -110,12 +159,34 @@ void alarm_task_function(void* parameters)
         }
       }
     }
-    if(snooze_loop == false)
+    if(snooze_trigger_flag == true)
     {
-      if((alarm_snooze_flag == true) || (alarm_dismiss_flag == true))//if these flags are turned on without the alarm being set, simply turn them off
+      while(1)
       {
-        alarm_snooze_flag = false;
-        alarm_dismiss_flag = false;
+        if(alarm_snooze_flag == false)
+        {
+          for(int i=0; i<3; i++)
+          {
+            digitalWrite(buzzer, HIGH);
+            vTaskDelay(300/portTICK_PERIOD_MS);
+            digitalWrite(buzzer, LOW);
+            vTaskDelay(300/portTICK_PERIOD_MS);
+            Serial.println("This is snooze buzzer");
+          }
+        }
+        else if(alarm_dismiss_flag == true)
+        {
+          alarm_dismiss_flag = false;
+          snooze_trigger_flag = false;
+          break;
+        }
+        else//snooze flag is set
+        {
+          timerAlarmEnable(snooze_timer_handler);
+          snooze_trigger_flag = false;
+          break;
+        }
+        vTaskDelay(2000/portTICK_PERIOD_MS);
       }
     }
     vTaskDelay(500/portTICK_PERIOD_MS);
@@ -151,45 +222,15 @@ void web_server_task_function(void* paramters)
     Serial.println("Got something");
   });
   */
-
-  //Handling the post request and responses
-  /*
-  server.on("/index", HTTP_POST, [](AsyncWebServerRequest *request){
-    int params = request->params();
-    Serial.println(request);
-    request->send(200, "text/plain", "post done");
-    Serial.printf("Save settings, %d params", params);
-    for(int i = 0; i < params; i++) 
-    {
-      AsyncWebParameter* p = request->getParam(i);
-      if(p->isFile())
-      {
-        Serial.printf("_FILE[%s]: %s, size: %u", p->name().c_str(), p->value().c_str(), p->size());
-      } 
-      else if(p->isPost())
-      {
-        Serial.printf("_POST[%s]: %s", p->name().c_str(), p->value().c_str());
-      } 
-      else 
-      {
-        Serial.printf("_GET[%s]: %s", p->name().c_str(), p->value().c_str());
-      }
-    }
-   
-    if(request->hasParam("hello", true))
-    {
-      Serial.println("hello paramter present in post request");
-    }
-  });*/
-
+  
    //Handling the post request and responses
    //body data handling 
    server.on(
     "/index",
     HTTP_POST,
-    [](AsyncWebServerRequest * request){},
+    [](AsyncWebServerRequest* request){},
     NULL,
-    [](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total) {
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
 
     //reading and parsin the json object 
     char json_obj[100];
@@ -217,12 +258,20 @@ void web_server_task_function(void* paramters)
     else
     {
       JsonVariant parse_res_alarm_time = json_doc["time"];
-      alarm_time = parse_res_alarm_time.as<char*>();//typecast to char*
+      JsonVariant parse_res_alarm_snooze_time = json_doc["snooze_time"];
+      alarm_time = parse_res_alarm_time.as<const char*>();//typecast to char*
+      alarm_snooze_time = parse_res_alarm_snooze_time.as<unsigned int>();//typecast to int 
       Serial.print("Alarm time: ");
       Serial.println(alarm_time);
+      Serial.printf("Alarm snooze time: %d mins", alarm_snooze_time);
       Serial.println();
       alarm_set_flag = true;
     }
+
+    //reinit flags
+    alarm_dismiss_flag = false;
+    alarm_snooze_flag = false;
+    snooze_trigger_flag = false;
     
     request->send(200, "text/plain", "post done");
   });
@@ -234,40 +283,6 @@ void web_server_task_function(void* paramters)
 
   vTaskDelete(NULL);
 }
-
-//Interrupt Service Routine Functions
-
-void IRAM_ATTR snooze_timer_isr()
-{
-  if(alarm_snooze_flag == false)
-  {
-    timerWrite(snooze_timer_handler, 0);
-    snooze_loop = false;
-    return;
-  }
-  for(int j=0; j<3; j++)
-  {
-    digitalWrite(buzzer, HIGH);
-    vTaskDelay(300/portTICK_PERIOD_MS);
-    digitalWrite(buzzer, LOW);
-    vTaskDelay(300/portTICK_PERIOD_MS);
-  }
-}
-
-//alarm dismiss button ISR
-void IRAM_ATTR alarm_dismiss_isr()
-{
-  alarm_dismiss_flag = true;
-  alarm_snooze_flag = false;
-  snooze_loop = false;
-}
-
-//alarm snooze button ISR
-void IRAM_ATTR alarm_snooze_isr()
-{
-  alarm_snooze_flag = true;
-}
-
 
 void setup() 
 {
@@ -311,12 +326,12 @@ void setup()
   pinMode(buzzer, OUTPUT);
   pinMode(dismiss_button, INPUT_PULLUP);
   pinMode(snooze_button, INPUT_PULLUP);
+  pinMode(touch_sensor, INPUT);
 
   //----------------------------------------------------------------------------------------------------------------
 
-  //initialising GPIO interrupts
-  attachInterrupt(dismiss_button, alarm_dismiss_isr, RISING);
-  attachInterrupt(snooze_button, alarm_snooze_isr, RISING);
+  //set the interrupts to core 0 
+  xTaskCreatePinnedToCore(interrupt_set_task_function, "interrupt_task", 1028, NULL, 1, &interrupt_set_task_handler, pro_cpu);
   
   //----------------------------------------------------------------------------------------------------------------
 
@@ -328,10 +343,10 @@ void setup()
   timerAlarmWrite(sync_timer_handler, sync_timer_max_count, true);
   */
 
-  //alarm timer
-  snooze_timer_handler = timerBegin(0, timer_divider, true);
-  timerAttachInterrupt(snooze_timer_handler, &snooze_timer_isr, true);
-  timerAlarmWrite(snooze_timer_handler, snooze_timer_def_max_count, true);
+  //alarm snooze timer
+  snooze_timer_handler = timerBegin(0, timer_divider, true);//countup true
+  timerAttachInterrupt(snooze_timer_handler, &snooze_timer_isr, true);//edge triggered tru
+  timerAlarmWrite(snooze_timer_handler, snooze_timer_def_max_count, false);//autoreload false, i.e single tick time timer 
 
   //----------------------------------------------------------------------------------------------------------------
    
@@ -340,6 +355,10 @@ void setup()
   xTaskCreatePinnedToCore(alarm_task_function, "alarm_task", 2048, NULL, 1, &alarm_task_handler, app_cpu);//alarm task
   xTaskCreatePinnedToCore(web_server_task_function, "server_task", 6000, NULL, 1, &web_server_task_handler, pro_cpu);//web server tasks
 
+  //----------------------------------------------------------------------------------------------------------------
+
+  //create mutex
+  
   //----------------------------------------------------------------------------------------------------------------
 
   //NTPClient initiation
